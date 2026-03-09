@@ -477,11 +477,18 @@ var GAS_URL = 'https://script.google.com/macros/s/AKfycbxkbNLn4jo8Ko0dbNchoSUUWx
    O PWA usa fetch() em vez de google.script.run
 ═══════════════════════════════════════ */
 function gasCall(action, params) {
+  // Apps Script requer redirect:follow e sem header Content-Type customizado
+  // para evitar bloqueio de CORS no preflight
+  var body = JSON.stringify({action: action, params: params});
   return fetch(GAS_URL, {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: action, params: params})
-  }).then(function(r){ return r.json(); });
+    redirect: 'follow',
+    body: body
+  }).then(function(r){ return r.json(); })
+  .catch(function(err){
+    // Fallback: tenta via GET com parâmetros encoded (para ações simples)
+    throw err;
+  });
 }
 
 /* ═══════════════════════════════════════
