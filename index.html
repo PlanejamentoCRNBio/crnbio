@@ -334,9 +334,11 @@ textarea{resize:vertical;min-height:54px;}
     <div class="f"><label for="proj">Projeto / Sonômetro *</label>
       <input type="text" id="proj" placeholder="Ex: Sonômetro 01"/></div>
   </div>
-  <div class="g2">
+  <div class="g3" style="margin-bottom:9px">
     <div class="f"><label for="ponto">Ponto *</label>
       <input type="text" id="ponto" placeholder="Ex: P1, P2..."/></div>
+    <div class="f"><label for="numSon">Nº do Sonômetro *</label>
+      <input type="text" id="numSon" placeholder="Ex: SN-001" inputmode="text"/></div>
     <div class="f"><label for="turno">Turno *</label>
       <select id="turno">
         <option value="">Selecione...</option>
@@ -371,9 +373,9 @@ textarea{resize:vertical;min-height:54px;}
     </select>
     <button class="ba" onclick="addPx()">+ Adicionar</button>
   </div>
-  <div class="xtra" id="xPx">
-    <div class="f"><label>Detalhe:</label>
-      <input type="text" id="pxDet" placeholder="Descreva..."/></div>
+  <div class="xtra on" id="xPx">
+    <div class="f"><label>Detalhe (opcional):</label>
+      <input type="text" id="pxDet" placeholder="Informações adicionais..."/></div>
   </div>
   <div class="tags" id="pxTags"></div>
 </div>
@@ -391,7 +393,6 @@ textarea{resize:vertical;min-height:54px;}
       <option value="Animais">Animais (especificar)</option>
       <option>Insetos</option>
       <option>Diálogo entre populares</option>
-      <option>Ruído audível da LT (específico)</option>
       <option value="Outro">Outro</option>
     </select>
     <div class="mw">
@@ -402,9 +403,9 @@ textarea{resize:vertical;min-height:54px;}
     </div>
     <button class="ba" onclick="addOb()">+ Adicionar</button>
   </div>
-  <div class="xtra" id="xOb">
-    <div class="f"><label id="obLbl">Especifique:</label>
-      <input type="text" id="obDet" placeholder="Descreva..."/></div>
+  <div class="xtra on" id="xOb">
+    <div class="f"><label id="obLbl">Detalhe (opcional):</label>
+      <input type="text" id="obDet" placeholder="Informações adicionais..."/></div>
   </div>
   <div class="tags" id="obTags"></div>
 </div>
@@ -749,16 +750,16 @@ function rmFoto(){
 /* PROXIMIDADE */
 function onPxChg(){
   var v=g('pxSel').value;
-  g('xPx').classList.toggle('on',v==='Outro');
-  if(v!=='Outro')g('pxDet').value='';
+  g('xPx').classList.toggle('on', v!=='');
+  if(!v) g('pxDet').value='';
 }
 function addPx(){
   var s=g('pxSel').value,d=g('pxDet').value.trim();
   if(!s){alert('Selecione uma característica.');return;}
-  if(s==='Outro'&&!d){alert('Descreva o tipo de área.');return;}
-  PX.push(s==='Outro'?'Outro: '+d:s);rPx();
+  var label=d?s+' ('+d+')':s;
+  PX.push(label);rPx();
   g('pxSel').value='';g('pxDet').value='';
-  g('xPx').classList.remove('on');
+  g('xPx').classList.toggle('on', false);
 }
 function rPx(){
   var b=g('pxTags');b.innerHTML='';
@@ -772,20 +773,25 @@ function dPx(i){PX.splice(i,1);rPx();}
 
 /* OBSERVAÇÕES */
 function onObChg(){
-  var v=g('obSel').value,x=g('xOb'),lb=g('obLbl');
-  if(v==='Animais'){x.classList.add('on');lb.textContent='Especifique o animal:';}
-  else if(v==='Outro'){x.classList.add('on');lb.textContent='Descreva a ocorrência:';}
-  else{x.classList.remove('on');g('obDet').value='';}
+  var v=g('obSel').value,lb=g('obLbl');
+  // Detalhe sempre visível para qualquer opção
+  g('xOb').classList.toggle('on', v!=='');
+  if(!v){g('obDet').value='';}
+  // Atualiza o label conforme opção
+  if(v==='Animais') lb.textContent='Especifique o animal (opcional):';
+  else if(v==='Outro') lb.textContent='Descreva a ocorrência (opcional):';
+  else lb.textContent='Detalhe (opcional):';
 }
 function addOb(){
   var s=g('obSel').value,m=g('obMin').value.trim(),d=g('obDet').value.trim();
   if(!s){alert('Selecione uma ocorrência.');return;}
   if(!m){alert('Informe o minuto (MM:SS).');return;}
   if(!/^\d{1,2}:\d{2}$/.test(m)){alert('Use o formato MM:SS (ex: 02:34).');return;}
-  var l=(s==='Animais'||s==='Outro')&&d?s+' ('+d+')':s;
+  // Detalhe é opcional para todas as opções
+  var l=d?s+' ('+d+')':s;
   OB.push({l:l,m:m});rOb();
   g('obSel').value='';g('obMin').value='';g('obDet').value='';
-  g('xOb').classList.remove('on');
+  g('xOb').classList.toggle('on',false);
 }
 function rOb(){
   var b=g('obTags');b.innerHTML='';
@@ -802,21 +808,27 @@ function dOb(i){OB.splice(i,1);rOb();}
 ═══════════════════════════════════════ */
 function salvar(){
   var r=v('resp'),e=v('empr'),da=v('data');
-  var pq=v('parque'),pr=v('proj'),po=v('ponto'),tu=v('turno');
+  var pq=v('parque'),pr=v('proj'),po=v('ponto'),ns=v('numSon'),tu=v('turno');
   var co=v('cond'),te=v('temp'),ve=v('vento');
   var px=PX.join(', '),ob=OB.map(function(o){return o.l+' / '+o.m;}).join(', ');
   var er=[];
   if(!r)er.push('Responsável');if(!e)er.push('Empreendimento');if(!da)er.push('Data');
   if(!pq)er.push('Parque Eólico');if(!pr)er.push('Projeto');if(!po)er.push('Ponto');
-  if(!tu)er.push('Turno');if(!px)er.push('Proximidade (ao menos uma)');
+  if(!ns)er.push('Nº do Sonômetro');if(!tu)er.push('Turno');
+  if(!px)er.push('Proximidade (ao menos uma)');
   if(!co)er.push('Condições');if(!te)er.push('Temperatura');if(!ve)er.push('Vento');
   if(er.length){show('Preencha: '+er.join(', ')+'.',false);return;}
 
   if(g('fixar').checked)svC(r,e);
 
+  // Hora local do dispositivo no momento de salvar
+  var agora=new Date();
+  var hora=String(agora.getHours()).padStart(2,'0')+':'
+    +String(agora.getMinutes()).padStart(2,'0')+':'
+    +String(agora.getSeconds()).padStart(2,'0');
   var payload={
-    responsavel:r,empreendimento:e,data:da,
-    parqueEolico:pq,projeto:pr,ponto:po,turno:tu,
+    responsavel:r,empreendimento:e,data:da,hora:hora,
+    parqueEolico:pq,projeto:pr,ponto:po,numSonometro:ns,turno:tu,
     proximidade:px,observacoes:ob,condicoesTempo:co,
     temperatura:te,velocidadeVento:ve,
     latitude:g('geoLat').value,longitude:g('geoLon').value,
@@ -917,7 +929,7 @@ function limpar(){
   var fix=g('fixar').checked;
   if(!fix){sv('resp','');sv('empr','');g('ci').classList.remove('on');}
   sv('data',hj());
-  ['parque','proj','ponto'].forEach(function(id){sv(id,'');});
+  ['parque','proj','ponto','numSon'].forEach(function(id){sv(id,'');});
   sv('turno','');sv('cond','');sv('temp','');sv('vento','');
   sv('pxSel','');sv('pxDet','');g('xPx').classList.remove('on');
   sv('obSel','');sv('obMin','');sv('obDet','');g('xOb').classList.remove('on');
