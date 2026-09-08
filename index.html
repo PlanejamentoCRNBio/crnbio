@@ -316,8 +316,22 @@ textarea{resize:vertical;min-height:54px;}
   <div class="g3" style="margin-bottom:9px">
     <div class="f"><label for="resp">Responsável *</label>
       <input type="text" id="resp" placeholder="Nome completo" autocomplete="name"/></div>
-    <div class="f"><label for="empr">Empreendimento *</label>
-      <input type="text" id="empr" placeholder="Nome"/></div>
+    <div class="f"><label for="emprSel">Empreendimento *</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="emprSel" onchange="onEmprChg()" style="flex:1">
+          <option value="">Carregando...</option>
+        </select>
+        <button class="ba" onclick="recarregarEmpreendimentos()" title="Atualizar lista"
+          style="width:auto;padding:9px 11px;font-size:.85rem;flex-shrink:0">🔄</button>
+      </div>
+      <div class="xtra" id="xEmpr" style="margin-top:6px">
+        <div class="f">
+          <label>Nome do novo empreendimento *</label>
+          <input type="text" id="emprNovo" placeholder="Digite o nome exato..."/>
+        </div>
+      </div>
+      <input type="hidden" id="empr"/>
+    </div>
     <div class="f"><label for="data">Data *</label>
       <input type="date" id="data"/></div>
   </div>
@@ -329,8 +343,18 @@ textarea{resize:vertical;min-height:54px;}
 <div class="sec">
   <div class="st"><span class="i">▶</span>Identificação do Ponto</div>
   <div class="g2" style="margin-bottom:9px">
-    <div class="f"><label for="parque">Parque Eólico *</label>
-      <input type="text" id="parque" placeholder="Nome do parque"/></div>
+    <div class="f"><label for="parqueSel">Parque Eólico *</label>
+      <select id="parqueSel" onchange="onParqueChg()" disabled>
+        <option value="">Selecione o empreendimento primeiro...</option>
+      </select>
+      <div class="xtra" id="xParque" style="margin-top:6px">
+        <div class="f">
+          <label>Nome do novo parque *</label>
+          <input type="text" id="parqueNovo" placeholder="Digite o nome exato..."/>
+        </div>
+      </div>
+      <input type="hidden" id="parque"/>
+    </div>
     <div class="f"><label for="proj">Projeto / Sonômetro *</label>
       <input type="text" id="proj" placeholder="Ex: Sonômetro 01"/></div>
   </div>
@@ -662,9 +686,153 @@ var PX=[],OB=[];
 var fotoFile=null,fotoB64=null,fotoMime=null,fotoName=null,fotoUrl=null;
 var CK='crnbio_g',TTL=864e5;
 
+/* ═══════════════════════════════════════
+   EMPREENDIMENTOS — lista + novo
+═══════════════════════════════════════ */
+var CK_EMPR  = 'crnbio_emprs';
+var TTL_EMPR = 3 * 3600 * 1000; // 3 horas
+
+function carregarEmpreendimentos() {
+  var sel = g('emprSel');
+  // Tenta cache local primeiro
+  try {
+    var cached = JSON.parse(localStorage.getItem(CK_EMPR) || 'null');
+    if (cached && Date.now() - cached.ts < TTL_EMPR && cached.lista && cached.lista.length) {
+      preencherSelectEmpr(cached.lista);
+      return;
+    }
+  } catch(e) {}
+  if (!estouOnline()) {
+    sel.innerHTML = '<option value="">Sem conexão — pressione 🔄 ao reconectar</option><option value="__novo__">+ Novo empreendimento</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Carregando...</option>';
+  gasCall('listarEmpreendimentos', {})
+    .then(function(res) {
+      if (res.ok && res.lista && res.lista.length) {
+        try { localStorage.setItem(CK_EMPR, JSON.stringify({lista:res.lista,ts:Date.now()})); } catch(e) {}
+        preencherSelectEmpr(res.lista);
+      } else {
+        preencherSelectEmpr([]);
+      }
+    })
+    .catch(function() {
+      sel.innerHTML = '<option value="">Erro ao carregar — pressione 🔄</option><option value="__novo__">+ Novo empreendimento</option>';
+    });
+}
+
+function preencherSelectEmpr(lista) {
+  var sel = g('emprSel');
+  sel.innerHTML = '<option value="">Selecione o empreendimento...</option>';
+  lista.forEach(function(nome) {
+    var op = document.createElement('option');
+    op.value = nome; op.textContent = nome;
+    sel.appendChild(op);
+  });
+  var novo = document.createElement('option');
+  novo.value = '__novo__'; novo.textContent = '+ Novo empreendimento';
+  sel.appendChild(novo);
+}
+
+function recarregarEmpreendimentos() {
+  try { localStorage.removeItem(CK_EMPR); } catch(e) {}
+  carregarEmpreendimentos();
+}
+
+function onEmprChg() {
+  var v = g('emprSel').value;
+  g('xEmpr').classList.toggle('on', v === '__novo__');
+  if (v !== '__novo__') {
+    g('emprNovo').value = '';
+    g('empr').value = v;
+    // Carrega parques do empreendimento selecionado
+    if (v) carregarParques(v);
+    else resetarParques();
+  } else {
+    g('empr').value = '';
+    resetarParques();
+  }
+}
+
+
+/* ═══════════════════════════════════════
+   PARQUES — carrega após empreendimento
+═══════════════════════════════════════ */
+var CK_PARQUE  = 'crnbio_parques_';  // prefixo + nome empreendimento
+var TTL_PARQUE = 3 * 3600 * 1000;    // 3 horas
+
+function resetarParques() {
+  var sel = g('parqueSel');
+  sel.innerHTML = '<option value="">Selecione o empreendimento primeiro...</option>';
+  sel.disabled = true;
+  g('parque').value = '';
+  g('parqueNovo').value = '';
+  g('xParque').classList.remove('on');
+}
+
+function carregarParques(nomeEmpr) {
+  var sel = g('parqueSel');
+  sel.disabled = true;
+  sel.innerHTML = '<option value="">Carregando parques...</option>';
+  g('parque').value = '';
+  g('xParque').classList.remove('on');
+
+  // Tenta cache local
+  var ckKey = CK_PARQUE + nomeEmpr;
+  try {
+    var cached = JSON.parse(localStorage.getItem(ckKey) || 'null');
+    if (cached && Date.now() - cached.ts < TTL_PARQUE && cached.lista) {
+      preencherSelectParque(cached.lista);
+      return;
+    }
+  } catch(e) {}
+
+  if (!estouOnline()) {
+    sel.innerHTML = '<option value="">Sem conexão — liste parques ao reconectar</option><option value="__novo__">+ Novo parque</option>';
+    sel.disabled = false;
+    return;
+  }
+
+  gasCall('listarParques', {nomeEmpr: nomeEmpr})
+    .then(function(res) {
+      var lista = (res.ok && res.lista) ? res.lista : [];
+      try { localStorage.setItem(ckKey, JSON.stringify({lista:lista, ts:Date.now()})); } catch(e) {}
+      preencherSelectParque(lista);
+    })
+    .catch(function() {
+      sel.innerHTML = '<option value="">Erro ao carregar</option><option value="__novo__">+ Novo parque</option>';
+      sel.disabled = false;
+    });
+}
+
+function preencherSelectParque(lista) {
+  var sel = g('parqueSel');
+  sel.innerHTML = '<option value="">Selecione o parque...</option>';
+  lista.forEach(function(nome) {
+    var op = document.createElement('option');
+    op.value = nome; op.textContent = nome;
+    sel.appendChild(op);
+  });
+  var novo = document.createElement('option');
+  novo.value = '__novo__'; novo.textContent = '+ Novo parque eólico';
+  sel.appendChild(novo);
+  sel.disabled = false;
+}
+
+function onParqueChg() {
+  var v = g('parqueSel').value;
+  g('xParque').classList.toggle('on', v === '__novo__');
+  if (v !== '__novo__') {
+    g('parqueNovo').value = '';
+    g('parque').value = v;
+  } else {
+    g('parque').value = '';
+  }
+}
+
 /* CACHE 24h */
-function svC(r,e){
-  try{localStorage.setItem(CK,JSON.stringify({r:r,e:e,ts:Date.now()}));}catch(x){}
+function svC(r,e,sel){
+  try{localStorage.setItem(CK,JSON.stringify({r:r,e:e,sel:sel||'',ts:Date.now()}));}catch(x){}
 }
 function ldC(){
   try{
@@ -675,7 +843,16 @@ function ldC(){
 }
 function initC(){
   var c=ldC();if(!c)return;
-  g('resp').value=c.r||'';g('empr').value=c.e||'';
+  g('resp').value=c.r||'';
+  // Restaura seleção do empreendimento se ainda estiver na lista
+  if(c.sel && c.sel !== '__novo__'){
+    var sel=g('emprSel');
+    for(var i=0;i<sel.options.length;i++){
+      if(sel.options[i].value===c.sel){sel.value=c.sel;g('empr').value=c.sel;break;}
+    }
+  } else if(c.e){
+    g('empr').value=c.e;
+  }
   var el=g('ci');
   el.textContent='ℹ️ Dados restaurados de '+new Date(c.ts).toLocaleString('pt-BR')+'.';
   el.classList.add('on');
@@ -807,6 +984,20 @@ function dOb(i){OB.splice(i,1);rOb();}
    SALVAR
 ═══════════════════════════════════════ */
 function salvar(){
+  // Resolve empreendimento
+  var emprSel = g('emprSel').value;
+  if (emprSel === '__novo__') {
+    sv('empr', g('emprNovo').value.trim());
+  } else {
+    sv('empr', emprSel);
+  }
+  // Resolve parque
+  var parqueSel = g('parqueSel').value;
+  if (parqueSel === '__novo__') {
+    sv('parque', g('parqueNovo').value.trim());
+  } else {
+    sv('parque', parqueSel);
+  }
   var r=v('resp'),e=v('empr'),da=v('data');
   var pq=v('parque'),pr=v('proj'),po=v('ponto'),ns=v('numSon'),tu=v('turno');
   var co=v('cond'),te=v('temp'),ve=v('vento');
@@ -819,7 +1010,7 @@ function salvar(){
   if(!co)er.push('Condições');if(!te)er.push('Temperatura');if(!ve)er.push('Vento');
   if(er.length){show('Preencha: '+er.join(', ')+'.',false);return;}
 
-  if(g('fixar').checked)svC(r,e);
+  if(g('fixar').checked)svC(r,e,emprSel);
 
   // Hora local do dispositivo no momento de salvar
   var agora=new Date();
@@ -836,6 +1027,8 @@ function salvar(){
     fotoB64:fotoB64||null,fotoMime:fotoMime||null,fotoName:fotoName||null
   };
 
+  // Invalida cache de parques do empreendimento para forçar reload
+  try { localStorage.removeItem(CK_PARQUE + (e||'')); } catch(ex) {}
   enfileirar(payload,function(ok){
     if(!ok){
       show('⚠ Não foi possível salvar localmente.',false);return;
@@ -927,7 +1120,20 @@ function show(msg,ok){
 }
 function limpar(){
   var fix=g('fixar').checked;
-  if(!fix){sv('resp','');sv('empr','');g('ci').classList.remove('on');}
+  if(!fix){
+    sv('resp','');sv('empr','');
+    g('emprSel').value='';
+    g('emprNovo').value='';
+    g('xEmpr').classList.remove('on');
+    g('ci').classList.remove('on');
+  }
+  // Reseta parque sempre
+  sv('parque','');
+  g('parqueSel').value='';
+  g('parqueSel').innerHTML='<option value="">Selecione o empreendimento primeiro...</option>';
+  g('parqueSel').disabled=true;
+  g('parqueNovo').value='';
+  g('xParque').classList.remove('on');
   sv('data',hj());
   ['parque','proj','ponto','numSon'].forEach(function(id){sv(id,'');});
   sv('turno','');sv('cond','');sv('temp','');sv('vento','');
@@ -949,6 +1155,7 @@ function hj(){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 g('data').value=hj();
+carregarEmpreendimentos();
 initC();
 atualizarBannerOffline();
 atualizarUIFila();
