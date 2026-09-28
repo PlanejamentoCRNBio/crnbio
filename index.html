@@ -742,13 +742,23 @@ function recarregarEmpreendimentos() {
 function onEmprChg() {
   var v = g('emprSel').value;
   g('xEmpr').classList.toggle('on', v === '__novo__');
-  if (v !== '__novo__') {
+  if (v === '__novo__') {
+    // Empreendimento novo — parque também é novo obrigatoriamente
+    g('empr').value = '';
+    var sel = g('parqueSel');
+    sel.innerHTML = '<option value="__novo__">+ Novo parque eólico</option>';
+    sel.value = '__novo__';
+    sel.disabled = false;
+    g('xParque').classList.add('on');
+    g('parque').value = '';
+    g('parqueNovo').value = '';
+  } else if (v) {
+    // Empreendimento existente — carrega parques da planilha
     g('emprNovo').value = '';
     g('empr').value = v;
-    // Carrega parques do empreendimento selecionado
-    if (v) carregarParques(v);
-    else resetarParques();
+    carregarParques(v);
   } else {
+    // Nada selecionado
     g('empr').value = '';
     resetarParques();
   }
